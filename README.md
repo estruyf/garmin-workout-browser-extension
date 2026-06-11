@@ -17,6 +17,20 @@ bottom-right of every Garmin Connect page; clicking it slides out a drawer that:
 Because it runs on `connect.garmin.com`, everything uses your real, logged-in
 session (same-origin) — so there is no separate login and no Cloudflare challenge.
 
+## Screenshots
+
+### Workouts button on Garmin Connect
+
+![Workouts button on Garmin Connect](assets/screenshots/workouts.webp)
+
+### Workouts drawer overview
+
+![Workouts drawer overview](assets/screenshots/workouts-overview.webp)
+
+### Workout details view
+
+![Workout details view](assets/screenshots/workouts-view.webp)
+
 ## How to use
 
 1. Sign in to [connect.garmin.com](https://connect.garmin.com).
@@ -77,3 +91,10 @@ unpacked** to run it in your day-to-day Chrome profile.
 ## Learn more
 
 [Extension.js docs](https://extension.js.org).
+
+<br />
+
+<p align="center">
+  <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2Festruyf%2Fgarmin-workout-browser-extension"><img src="https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Festruyf%2Fgarmin-workout-browser-extension&countColor=%23263759" /></a>
+</p>
+

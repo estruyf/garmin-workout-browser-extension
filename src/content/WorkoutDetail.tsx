@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { deleteWorkout, getWorkoutDetail, workoutUrl, type GarminWorkoutDetail, type WorkoutSummary } from '../lib/garmin-api';
 import { jsonProfile, totalDuration, type ProfileBlock } from '../lib/profile';
+import PowerZones from './PowerZones';
 import Shell from './Shell';
 import WorkoutChart from './WorkoutChart';
 import { TrashIcon } from './icons';
@@ -90,6 +91,8 @@ export default function WorkoutDetail({ summary, ftp, onClose, onBack, onDeleted
             ) : (
               <p className="text-sm text-gray-400">This workout has no chartable power steps.</p>
             )}
+
+            {ftp > 0 && <PowerZones ftp={ftp} />}
 
             {description && <p className="whitespace-pre-line text-sm text-gray-600">{description}</p>}
 

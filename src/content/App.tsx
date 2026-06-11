@@ -5,7 +5,7 @@ import { getStoredFtp, setStoredFtp } from '../lib/storage';
 import ImportPanel from './ImportPanel';
 import WorkoutDetail from './WorkoutDetail';
 import WorkoutList from './WorkoutList';
-import { UploadIcon } from './icons';
+import { DumbbellIcon } from './icons';
 
 const Z_INDEX = 2147483646;
 
@@ -72,7 +72,7 @@ export default function App() {
         style={{ zIndex: Z_INDEX }}
         className="fixed bottom-5 right-5 flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-700"
       >
-        <UploadIcon />
+        <DumbbellIcon />
         Workouts
       </button>
     );
