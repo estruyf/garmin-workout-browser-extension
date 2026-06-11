@@ -2,26 +2,31 @@
 
 # Garmin Workout Importer
 
-A Chrome extension that imports structured workouts straight into your **Garmin
-Connect** library from a `.json` or `.zwo` (Zwift) file. ZWO files are converted
-to Garmin's structured-workout JSON format in the browser before upload.
+A Chrome extension that manages your **Garmin Connect** workouts and imports new
+ones from `.json` or `.zwo` (Zwift) files. ZWO files are converted to Garmin's
+structured-workout JSON format in the browser before upload.
 
-The UI is an **in-page drawer**. A floating **Import workout** button sits at
-the bottom-right of every Garmin Connect page; clicking it slides out a drawer
-with the whole experience — file picker, FTP, power zones, an FTP-adaptive
-preview, and import. Because it runs on `connect.garmin.com`, the upload uses
-your real, logged-in session (same-origin) — so there is no separate login and
-no Cloudflare challenge.
+The UI is an **in-page drawer**. A floating **Workouts** button sits at the
+bottom-right of every Garmin Connect page; clicking it slides out a drawer that:
+
+- **Lists your existing workouts** — search them, and click one to see its power
+  profile, details, open it on Garmin, or delete it.
+- **Imports a new workout** — the button at the top opens the import flow (file
+  picker, FTP, power zones, an FTP-adaptive preview).
+
+Because it runs on `connect.garmin.com`, everything uses your real, logged-in
+session (same-origin) — so there is no separate login and no Cloudflare challenge.
 
 ## How to use
 
 1. Sign in to [connect.garmin.com](https://connect.garmin.com).
-2. Click the floating **Import workout** button (bottom-right) — or the
-   extension's toolbar icon — to open the drawer.
-3. Pick a `.json` or `.zwo` file. Enter your **FTP** in watts — for ZWO the
-   `% FTP` targets convert to watts and the preview chart + power zones update live.
-4. Review the preview, set the workout name, and click **Import to Garmin**.
-5. Use **Open workout** to jump to the imported workout on Garmin Connect.
+2. Click the floating **Workouts** button (bottom-right) — or the extension's
+   toolbar icon — to open the drawer. It lists your workouts.
+3. Click a workout to see its power-profile graph and details, or use
+   **Import a new workout** at the top.
+4. To import: pick a `.json` or `.zwo` file, enter your **FTP** in watts (for ZWO
+   the `% FTP` targets convert to watts and the preview updates live), set the
+   name, and click **Import to Garmin**.
 
 ## How it works
 

@@ -16,6 +16,25 @@ export interface CreatedWorkout {
   sportType?: { sportTypeKey?: string };
 }
 
+export interface WorkoutSummary {
+  workoutId: number;
+  workoutName: string;
+  description?: string | null;
+  sportType?: { sportTypeKey?: string };
+  estimatedDurationInSecs?: number | null;
+  updatedDate?: string | null;
+}
+
+export interface GarminWorkoutDetail {
+  workoutId: number;
+  workoutName: string;
+  description?: string | null;
+  sportType?: { sportTypeKey?: string };
+  estimatedDurationInSecs?: number | null;
+  workoutSegments?: unknown[];
+  [key: string]: unknown;
+}
+
 /** Read the CSRF token the Garmin web app embeds in the page <head>. */
 export function csrfToken(): string | null {
   return document.querySelector("meta[name='csrf-token']")?.getAttribute('content') ?? null;
@@ -28,6 +47,55 @@ function authHeaders(token: string, json: boolean): HeadersInit {
   };
   if (json) headers['Content-Type'] = 'application/json;charset=UTF-8';
   return headers;
+}
+
+/** Authenticated GET against the gc-api (same-origin cookies + CSRF). */
+async function apiGet(path: string): Promise<unknown> {
+  const token = csrfToken();
+  const res = await fetch(`${BASE}${path}`, {
+    credentials: 'include',
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      ...(token ? { 'connect-csrf-token': token } : {}),
+    },
+  });
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('Garmin rejected the request — reload Garmin Connect and try again.');
+    }
+    throw new Error(`Garmin returned HTTP ${res.status}.`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+/** List the user's own workouts (summaries — no step detail). */
+export async function listWorkouts(limit = 999): Promise<WorkoutSummary[]> {
+  const data = await apiGet(
+    `/workout-service/workouts?start=1&limit=${limit}&myWorkoutsOnly=true&sharedWorkoutsOnly=false`,
+  );
+  return Array.isArray(data) ? (data as WorkoutSummary[]) : [];
+}
+
+/** Fetch a single workout with its full step structure. */
+export async function getWorkoutDetail(workoutId: number): Promise<GarminWorkoutDetail> {
+  return (await apiGet(`/workout-service/workout/${workoutId}?includeAudioNotes=true`)) as GarminWorkoutDetail;
+}
+
+/** Delete a workout from the user's library. */
+export async function deleteWorkout(workoutId: number): Promise<void> {
+  const token = csrfToken();
+  const res = await fetch(`${BASE}/workout-service/workout/${workoutId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      ...(token ? { 'connect-csrf-token': token } : {}),
+    },
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Garmin returned HTTP ${res.status} while deleting.`);
+  }
 }
 
 /** Create a structured workout from a Garmin workout-service JSON payload. */
