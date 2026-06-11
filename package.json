@@ -6,9 +6,9 @@
   "license": "MIT",
   "type": "module",
   "author": {
-    "name": "Your Name",
-    "email": "your@email.com",
-    "url": "https://yourwebsite.com"
+    "name": "Elio Struyf",
+    "email": "elio.struyf@example.com",
+    "url": "https://eliostruyf.com"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.43",

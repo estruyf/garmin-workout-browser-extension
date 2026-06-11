@@ -3,7 +3,7 @@
   "manifest_version": 3,
   "version": "1.0.0",
   "name": "Garmin Workout Importer",
-  "description": "Import JSON or ZWO (Zwift) workouts straight into your Garmin Connect library, with an FTP-adaptive workout preview. ZWO files are converted to Garmin's structured-workout format in the browser.",
+  "description": "Import JSON or ZWO workouts into Garmin Connect with FTP-adaptive preview. ZWO converted to Garmin's structured-workout format.",
   "icons": {
     "16": "images/icon.png",
     "32": "images/icon.png",
