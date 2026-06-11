@@ -82,6 +82,24 @@ export async function getWorkoutDetail(workoutId: number): Promise<GarminWorkout
   return (await apiGet(`/workout-service/workout/${workoutId}?includeAudioNotes=true`)) as GarminWorkoutDetail;
 }
 
+/** Update an existing workout in the user's library. */
+export async function updateWorkout(workoutId: number, payload: unknown): Promise<void> {
+  const token = csrfToken();
+  if (!token) throw new Error('Could not find the Garmin CSRF token — reload Garmin Connect and try again.');
+  const res = await fetch(`${BASE}/workout-service/workout/${workoutId}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: authHeaders(token, true),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    if (res.status === 401 || res.status === 403)
+      throw new Error('Garmin rejected the request — your session may have expired. Reload Garmin Connect and try again.');
+    throw new Error(`Garmin returned HTTP ${res.status}. ${text.slice(0, 200)}`.trim());
+  }
+}
+
 /** Delete a workout from the user's library. */
 export async function deleteWorkout(workoutId: number): Promise<void> {
   const token = csrfToken();

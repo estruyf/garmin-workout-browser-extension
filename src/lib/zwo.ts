@@ -412,7 +412,7 @@ export function zwoToGarminPayload(
     workoutName: name,
     description,
     estimatedDistanceUnit: { unitKey: null },
-    avgTrainingSpeed: null,
+    avgTrainingSpeed: 0,
     estimatedDurationInSecs: 0,
     estimatedDistanceInMeters: 0,
     estimateType: null,

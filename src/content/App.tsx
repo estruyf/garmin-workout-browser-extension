@@ -57,9 +57,6 @@ export default function App() {
     if (Number.isFinite(n) && n > 0) void setStoredFtp(n);
   }, [ftp]);
 
-  const ftpValue = Number(ftp);
-  const ftpRounded = Number.isFinite(ftpValue) && ftpValue > 0 ? Math.round(ftpValue) : 0;
-
   function close() {
     setOpen(false);
   }
@@ -68,7 +65,7 @@ export default function App() {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => { setView('list'); setOpen(true); }}
         style={{ zIndex: Z_INDEX }}
         className="fixed bottom-5 right-5 flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-700"
       >
@@ -94,7 +91,8 @@ export default function App() {
     return (
       <WorkoutDetail
         summary={selected}
-        ftp={ftpRounded}
+        ftp={ftp}
+        setFtp={setFtp}
         onClose={close}
         onBack={() => setView('list')}
         onDeleted={() => {
