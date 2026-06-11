@@ -1,0 +1,21 @@
+/*
+ * Full Tailwind v4 (preflight included). The widget renders inside a Shadow
+ * DOM (see content/index.tsx), so preflight's global reset is contained to the
+ * widget and can't touch the Garmin Connect page. The injector remaps :root to
+ * :host so Tailwind's theme variables apply within the shadow tree.
+ */
+@import "tailwindcss";
+
+/* Make sure Tailwind scans this widget's source for class names. */
+@source './';
+
+:host {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  line-height: 1.5;
+}
+
+button:hover {
+  cursor: pointer;
+}

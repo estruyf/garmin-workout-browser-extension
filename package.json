@@ -1,0 +1,36 @@
+{
+  "private": true,
+  "name": "garmin-workout-importer",
+  "description": "TypeScript-based extension with a sidebar panel. Adds a sidebar with a simple page.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "type": "module",
+  "author": {
+    "name": "Your Name",
+    "email": "your@email.com",
+    "url": "https://yourwebsite.com"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.43",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "extension": "^3.18.2",
+    "typescript": "5.3.3"
+  },
+  "scripts": {
+    "dev": "extension dev --browser chrome --no-browser",
+    "start": "extension start --browser chrome --no-browser",
+    "build": "extension build",
+    "preview": "extension preview",
+    "build:chrome": "extension build --browser chrome",
+    "build:firefox": "extension build --browser firefox",
+    "build:edge": "extension build --browser edge"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwindcss": "^4.3.0"
+  },
+  "packageManager": "npm@10.9.4"
+}
