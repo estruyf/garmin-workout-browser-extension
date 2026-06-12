@@ -24,7 +24,9 @@
     "preview": "extension preview",
     "build:chrome": "extension build --browser chrome",
     "build:firefox": "extension build --browser firefox",
-    "build:edge": "extension build --browser edge"
+    "build:edge": "extension build --browser edge",
+    "version": "node .scripts/update-manifest-version.mjs",
+    "release": "rm -rf dist && npm run build && node .scripts/release.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.0",
