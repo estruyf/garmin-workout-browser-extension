@@ -2,7 +2,7 @@
   "private": true,
   "name": "garmin-workout-importer",
   "description": "TypeScript-based extension with a sidebar panel. Adds a sidebar with a simple page.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "type": "module",
   "author": {

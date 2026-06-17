@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
   "manifest_version": 3,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Garmin Workout Importer",
   "description": "Import JSON or ZWO workouts into Garmin Connect with FTP-adaptive preview. ZWO converted to Garmin's structured-workout format.",
   "icons": {
@@ -21,14 +21,20 @@
     },
     "default_title": "Open Garmin Workout Importer"
   },
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "background": {
     "service_worker": "background.ts"
   },
   "content_scripts": [
     {
-      "matches": ["https://connect.garmin.com/*"],
-      "js": ["content/index.tsx"]
+      "matches": [
+        "https://connect.garmin.com/*"
+      ],
+      "js": [
+        "content/index.tsx"
+      ]
     }
   ]
 }
