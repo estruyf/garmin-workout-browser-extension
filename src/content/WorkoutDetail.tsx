@@ -88,6 +88,40 @@ function removeStepAtPath(
   return next;
 }
 
+function reorderStepsAtPath(
+  detail: GarminWorkoutDetail,
+  segIdx: number,
+  parentPath: number[],
+  fromIdx: number,
+  toIdx: number,
+): GarminWorkoutDetail {
+  const next = JSON.parse(JSON.stringify(detail)) as GarminWorkoutDetail;
+  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
+  let steps = segs[segIdx].workoutSteps;
+  for (let i = 0; i < parentPath.length; i++) {
+    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
+  }
+  const [item] = steps.splice(fromIdx, 1);
+  steps.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, item);
+  return next;
+}
+
+function addStepAtPath(
+  detail: GarminWorkoutDetail,
+  segIdx: number,
+  parentPath: number[],
+  newStep: Record<string, unknown>,
+): GarminWorkoutDetail {
+  const next = JSON.parse(JSON.stringify(detail)) as GarminWorkoutDetail;
+  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
+  let steps = segs[segIdx].workoutSteps;
+  for (let i = 0; i < parentPath.length; i++) {
+    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
+  }
+  steps.push(newStep);
+  return next;
+}
+
 function applyStepEdit(
   detail: GarminWorkoutDetail,
   segIdx: number,
@@ -210,6 +244,14 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
     setEditedDetail((prev) => (prev ? removeStepAtPath(prev, segIdx, path) : prev));
   }
 
+  function handleStepReorder(segIdx: number, parentPath: number[], fromIdx: number, toIdx: number) {
+    setEditedDetail((prev) => (prev ? reorderStepsAtPath(prev, segIdx, parentPath, fromIdx, toIdx) : prev));
+  }
+
+  function handleStepAdd(segIdx: number, parentPath: number[], step: Record<string, unknown>) {
+    setEditedDetail((prev) => (prev ? addStepAtPath(prev, segIdx, parentPath, step) : prev));
+  }
+
   async function handleEditSave() {
     if (!editedDetail) return;
     setEditSaveStatus({ state: 'saving' });
@@ -302,7 +344,7 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
       footer={editFooter}
     >
       {subView === 'edit' && editedDetail ? (
-        <WorkoutEdit detail={editedDetail} ftp={ftpNum} onEdit={handleStepEdit} onRemove={handleStepRemove} />
+        <WorkoutEdit detail={editedDetail} ftp={ftpNum} onEdit={handleStepEdit} onRemove={handleStepRemove} onReorder={handleStepReorder} onAdd={handleStepAdd} />
       ) : (
         <div className="space-y-4 px-4 py-4">
           {state.status === 'loading' && (

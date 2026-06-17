@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 
-import { createWorkout, workoutUrl } from '../lib/garmin-api';
+import { createWorkout, workoutUrl, type GarminWorkoutDetail } from '../lib/garmin-api';
 import { jsonProfile, profileNeedsFtp, zwoProfile, type ProfileBlock } from '../lib/profile';
 import { normalizeWorkoutJson } from '../lib/workout-json';
 import { zwoName, zwoToGarminPayload, type GarminWorkoutPayload } from '../lib/zwo';
 import PowerZones from './PowerZones';
 import Shell from './Shell';
 import WorkoutChart from './WorkoutChart';
+import WorkoutEdit from './WorkoutEdit';
 
 type FileKind = 'json' | 'zwo';
 
@@ -41,10 +42,83 @@ function payloadSportType(payload: GarminWorkoutPayload): string | undefined {
   return (payload as { sportType?: { sportTypeKey?: string } }).sportType?.sportTypeKey;
 }
 
+function getStepByPath(steps: Array<Record<string, unknown>>, path: number[]): Record<string, unknown> {
+  let step = steps[path[0]];
+  for (let i = 1; i < path.length; i++) {
+    step = (step.workoutSteps as Array<Record<string, unknown>>)[path[i]];
+  }
+  return step;
+}
+
+function applyStepEdit(
+  payload: GarminWorkoutPayload,
+  segIdx: number,
+  path: number[],
+  changes: Record<string, unknown>,
+): GarminWorkoutPayload {
+  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
+  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
+  Object.assign(getStepByPath(segs[segIdx].workoutSteps, path), changes);
+  return next;
+}
+
+function removeStepAtPath(
+  payload: GarminWorkoutPayload,
+  segIdx: number,
+  path: number[],
+): GarminWorkoutPayload {
+  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
+  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
+  let steps = segs[segIdx].workoutSteps;
+  for (let i = 0; i < path.length - 1; i++) {
+    steps = (steps[path[i]].workoutSteps as Array<Record<string, unknown>>);
+  }
+  steps.splice(path[path.length - 1], 1);
+  return next;
+}
+
+function reorderStepsAtPath(
+  payload: GarminWorkoutPayload,
+  segIdx: number,
+  parentPath: number[],
+  fromIdx: number,
+  toIdx: number,
+): GarminWorkoutPayload {
+  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
+  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
+  let steps = segs[segIdx].workoutSteps;
+  for (let i = 0; i < parentPath.length; i++) {
+    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
+  }
+  const [item] = steps.splice(fromIdx, 1);
+  steps.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, item);
+  return next;
+}
+
+function addStepAtPath(
+  payload: GarminWorkoutPayload,
+  segIdx: number,
+  parentPath: number[],
+  newStep: Record<string, unknown>,
+): GarminWorkoutPayload {
+  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
+  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
+  let steps = segs[segIdx].workoutSteps;
+  for (let i = 0; i < parentPath.length; i++) {
+    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
+  }
+  steps.push(newStep);
+  return next;
+}
+
 export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }: Props) {
   const [file, setFile] = useState<LoadedFile | null>(null);
   const [workoutName, setWorkoutName] = useState('');
   const [status, setStatus] = useState<Status>({ state: 'idle' });
+  const [subView, setSubView] = useState<'configure' | 'edit'>('configure');
+  const [editedPayload, setEditedPayload] = useState<GarminWorkoutPayload | null>(null);
+  const [originalPayload, setOriginalPayload] = useState<GarminWorkoutPayload | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const profile = useMemo<ProfileBlock[]>(() => {
     if (!file) return [];
@@ -66,20 +140,18 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
     setFile(null);
     setWorkoutName('');
     setStatus({ state: 'idle' });
+    setSubView('configure');
+    setEditedPayload(null);
   }
 
-  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function loadFile(picked: File) {
     setStatus({ state: 'idle' });
-    const picked = e.target.files?.[0];
-    if (!picked) return;
-
     const kind = detectKind(picked.name);
     if (!kind) {
       setFile(null);
       setStatus({ state: 'error', message: 'Please choose a .json or .zwo file.' });
       return;
     }
-
     try {
       const text = await picked.text();
       const defaultName = kind === 'zwo' ? zwoName(text) : (JSON.parse(text)?.workoutName ?? picked.name.replace(/\.json$/i, ''));
@@ -91,6 +163,29 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
     }
   }
 
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    if (picked) loadFile(picked);
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false);
+    }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const picked = e.dataTransfer.files?.[0];
+    if (picked) loadFile(picked);
+  }
+
   function buildPayload(): GarminWorkoutPayload {
     if (!file) throw new Error('No file selected.');
     const payload =
@@ -99,11 +194,49 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
     return payload;
   }
 
+  function enterEdit() {
+    try {
+      const payload = buildPayload();
+      setOriginalPayload(payload);
+      setEditedPayload(JSON.parse(JSON.stringify(payload)));
+      setStatus({ state: 'idle' });
+      setSubView('edit');
+    } catch (err) {
+      setStatus({ state: 'error', message: (err as Error).message });
+    }
+  }
+
+  function exitEdit() {
+    setSubView('configure');
+    setEditedPayload(null);
+    setOriginalPayload(null);
+  }
+
+  function resetEdit() {
+    if (originalPayload) setEditedPayload(JSON.parse(JSON.stringify(originalPayload)));
+  }
+
+  function handleStepEdit(segIdx: number, path: number[], changes: Record<string, unknown>) {
+    setEditedPayload((prev) => (prev ? applyStepEdit(prev, segIdx, path, changes) : prev));
+  }
+
+  function handleStepRemove(segIdx: number, path: number[]) {
+    setEditedPayload((prev) => (prev ? removeStepAtPath(prev, segIdx, path) : prev));
+  }
+
+  function handleStepReorder(segIdx: number, parentPath: number[], fromIdx: number, toIdx: number) {
+    setEditedPayload((prev) => (prev ? reorderStepsAtPath(prev, segIdx, parentPath, fromIdx, toIdx) : prev));
+  }
+
+  function handleStepAdd(segIdx: number, parentPath: number[], step: Record<string, unknown>) {
+    setEditedPayload((prev) => (prev ? addStepAtPath(prev, segIdx, parentPath, step) : prev));
+  }
+
   async function onImport() {
     if (!canImport) return;
     setStatus({ state: 'importing' });
     try {
-      const payload = buildPayload();
+      const payload = editedPayload ?? buildPayload();
       const created = await createWorkout(payload);
       setStatus({
         state: 'done',
@@ -117,102 +250,174 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
     }
   }
 
-  const footer = (
+  const importButton = (
     <button
       type="button"
       onClick={onImport}
       disabled={!canImport}
-      className="block w-full rounded-lg bg-blue-600 px-3 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+      className="flex-1 rounded-lg bg-blue-600 px-3 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
     >
       {status.state === 'importing' ? 'Importing…' : 'Import to Garmin'}
     </button>
   );
 
-  return (
-    <Shell title="Import a workout" subtitle="From a .json or .zwo file" onClose={onClose} onBack={onBack} footer={footer}>
-      <div className="space-y-4 px-4 py-4">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-600">Workout file (.json or .zwo)</span>
-          <input
-            type="file"
-            accept=".json,.zwo,application/json"
-            onChange={onFileChange}
-            className="block w-full text-sm text-gray-700 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
-          />
-          <span className="mt-1 block text-xs text-gray-400">{file ? `${file.name} (${file.kind.toUpperCase()})` : 'No file selected'}</span>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-600">FTP (watts)</span>
-          <input
-            type="number"
-            min={1}
-            value={ftp}
-            placeholder="e.g. 245"
-            onChange={(e) => setFtp(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
-          />
-          <span className="mt-1 block text-xs text-gray-400">
-            {needsFtp
-              ? 'Required — ZWO power is % of FTP. The preview and watt targets update as you change it.'
-              : 'Optional — used to colour the preview and show your power zones.'}
-          </span>
-        </label>
-
-        {ftpKnown && <PowerZones ftp={Math.round(ftpValue)} />}
-
-        {showChart && (
-          <div className="rounded-lg border border-gray-200 p-3">
-            <span className="mb-2 block text-xs font-medium text-gray-600">Preview</span>
-            <WorkoutChart blocks={profile} ftp={ftpKnown ? Math.round(ftpValue) : 0} />
-          </div>
-        )}
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-600">Workout name</span>
-          <input
-            type="text"
-            value={workoutName}
-            disabled={!file}
-            onChange={(e) => setWorkoutName(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
-          />
-        </label>
-
-        {status.state === 'error' && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{status.message}</div>}
-
-        {status.state === 'done' && (
-          <div className="space-y-2 rounded-lg bg-green-50 px-3 py-3 text-sm text-green-800">
-            <p>
-              Imported <span className="font-semibold">{status.workoutName}</span> into your Garmin library.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <a
-                href={workoutUrl(status.workoutId, status.workoutType)}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
-              >
-                Open workout
-              </a>
-              <button
-                type="button"
-                onClick={reset}
-                className="rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 transition hover:bg-green-100"
-              >
-                Import another
-              </button>
-              <button
-                type="button"
-                onClick={onBack}
-                className="rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 transition hover:bg-green-100"
-              >
-                Back to workouts
-              </button>
-            </div>
-          </div>
-        )}
+  const footer =
+    subView === 'edit' ? (
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={exitEdit}
+          className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={resetEdit}
+          className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+        >
+          Reset
+        </button>
+        {importButton}
       </div>
+    ) : (
+      <div className="flex gap-2">
+        {importButton}
+      </div>
+    );
+
+  return (
+    <Shell
+      title={subView === 'edit' ? 'Edit steps' : 'Import a workout'}
+      subtitle={subView === 'edit' ? workoutName : 'From a .json or .zwo file'}
+      onClose={onClose}
+      onBack={subView === 'edit' ? exitEdit : onBack}
+      footer={footer}
+    >
+      {subView === 'edit' && editedPayload ? (
+        <WorkoutEdit
+          detail={editedPayload as unknown as GarminWorkoutDetail}
+          ftp={ftpKnown ? Math.round(ftpValue) : 0}
+          onEdit={handleStepEdit}
+          onRemove={handleStepRemove}
+          onReorder={handleStepReorder}
+          onAdd={handleStepAdd}
+        />
+      ) : (
+        <div className="space-y-4 px-4 py-4">
+          <div>
+            <span className="mb-1 block text-xs font-medium text-gray-600">Workout file (.json or .zwo)</span>
+            <label
+              className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center transition ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50'}`}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+            >
+              <span className="text-sm text-gray-500">
+                {file ? (
+                  <span className="font-medium text-blue-700">{file.name} ({file.kind.toUpperCase()})</span>
+                ) : (
+                  <>Drop a file here, or <span className="font-medium text-blue-600">browse</span></>
+                )}
+              </span>
+              <span className="text-xs text-gray-400">.json or .zwo</span>
+              <input
+                type="file"
+                accept=".json,.zwo,application/json"
+                onChange={onFileChange}
+                className="sr-only"
+              />
+            </label>
+          </div>
+
+          {
+            file && (
+              <>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-gray-600">Workout name</span>
+                  <input
+                    type="text"
+                    value={workoutName}
+                    disabled={!file}
+                    onChange={(e) => setWorkoutName(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-gray-600">FTP (watts)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={ftp}
+                    placeholder="e.g. 245"
+                    onChange={(e) => setFtp(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
+                  />
+                  <span className="mt-1 block text-xs text-gray-400">
+                    {needsFtp
+                      ? 'Required — ZWO power is % of FTP. The preview and watt targets update as you change it.'
+                      : 'Optional — used to colour the preview and show your power zones.'}
+                  </span>
+                </label>
+
+                {ftpKnown && <PowerZones ftp={Math.round(ftpValue)} />}
+              </>
+            )
+          }
+
+          {showChart && (
+            <div className="rounded-lg border border-gray-200 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-600">Preview</span>
+                <button
+                  type="button"
+                  onClick={enterEdit}
+                  disabled={!canImport}
+                  className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                >
+                  Edit steps
+                </button>
+              </div>
+              <WorkoutChart blocks={profile} ftp={ftpKnown ? Math.round(ftpValue) : 0} />
+            </div>
+          )}
+
+          {status.state === 'error' && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{status.message}</div>}
+
+          {status.state === 'done' && (
+            <div className="space-y-2 rounded-lg bg-green-50 px-3 py-3 text-sm text-green-800">
+              <p>
+                Imported <span className="font-semibold">{status.workoutName}</span> into your Garmin library.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={workoutUrl(status.workoutId, status.workoutType)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Open workout
+                </a>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 transition hover:bg-green-100"
+                >
+                  Import another
+                </button>
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 transition hover:bg-green-100"
+                >
+                  Back to workouts
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Shell>
   );
 }
