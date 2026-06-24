@@ -8,9 +8,17 @@ The UI is an **in-page drawer**. A floating **Workouts** button sits at the
 bottom-right of every Garmin Connect page; clicking it slides out a drawer that:
 
 - **Lists your existing workouts** — search them, and click one to see its power
-  profile, details, open it on Garmin, or delete it.
+  profile, details, open it on Garmin, delete, clone, or edit it.
 - **Imports a new workout** — the button at the top opens the import flow (file
-  picker, FTP, power zones, an FTP-adaptive preview).
+  picker or drag-and-drop, FTP, power zones, an FTP-adaptive preview). You can
+  edit, add, reorder, or delete steps before importing.
+- **Exports coach data** — downloads a `garmin-coach-export-YYYY-MM-DD.json`
+  snapshot (athlete profile, readiness, training load, trend data, and your last
+  6 weeks of rides). Drop it into any AI (ChatGPT, Claude, Gemini, …) to get
+  personalised training analysis, recovery advice, or AI-generated workout plans
+  tailored to your current fitness and load. For a purpose-built Claude
+  experience, use the
+  [Cycling Plan Coach skill](https://github.com/estruyf/skill-cycling-plan-coach).
 
 Because it runs on `connect.garmin.com`, everything uses your real, logged-in
 session (same-origin) — so there is no separate login and no Cloudflare challenge.
@@ -36,9 +44,19 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
    toolbar icon — to open the drawer. It lists your workouts.
 3. Click a workout to see its power-profile graph and details, or use
    **Import a new workout** at the top.
-4. To import: pick a `.json` or `.zwo` file, enter your **FTP** in watts (for ZWO
-   the `% FTP` targets convert to watts and the preview updates live), set the
-   name, and click **Import to Garmin**.
+4. To import: pick a `.json` or `.zwo` file (or drag-and-drop it), enter your
+   **FTP** in watts (for ZWO the `% FTP` targets convert to watts and the
+   preview updates live), edit steps if needed, set the name, and click
+   **Import to Garmin**.
+5. To export coach data: click the **Export** button in the workout list header.
+   The downloaded JSON includes your athlete profile, today's readiness snapshot,
+   training load metrics, HRV/HR trends, and the last 6 weeks of cycling
+   activities. You can then paste or upload this file into an AI assistant
+   (ChatGPT, Claude, Gemini, …) to get personalised training analysis, recovery
+   advice, or fully structured workout plans based on your current fitness and
+   training load. For the best Claude experience, install the
+   [Cycling Plan Coach skill](https://github.com/estruyf/skill-cycling-plan-coach)
+   — it understands the export format and can generate ready-to-import workouts.
 
 ## How it works
 

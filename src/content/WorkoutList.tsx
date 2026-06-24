@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { exportCoachData, listWorkouts, type WorkoutSummary } from '../lib/garmin-api';
 import Shell from './Shell';
-import { ChevronRightIcon, DownloadIcon, RefreshIcon, UploadIcon } from './icons';
+import { ChevronRightIcon, DownloadIcon, InfoIcon, RefreshIcon, UploadIcon } from './icons';
 
 interface Props {
   /** Bumped by the parent to force a refetch (after import / delete). */
@@ -48,6 +48,7 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
   const [query, setQuery] = useState('');
   const [exportState, setExportState] = useState<ExportState>('idle');
   const [exportError, setExportError] = useState('');
+  const [showExportInfo, setShowExportInfo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,17 +99,41 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
           Import a new workout
         </button>
 
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exportState === 'loading'}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
-        >
-          <DownloadIcon />
-          {exportState === 'loading' ? 'Exporting…' : exportState === 'done' ? 'Downloaded!' : 'Export coach data'}
-        </button>
+        <div className="mt-2 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportState === 'loading'}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+          >
+            <DownloadIcon />
+            {exportState === 'loading' ? 'Exporting…' : exportState === 'done' ? 'Downloaded!' : 'Export coach data'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowExportInfo((v) => !v)}
+            className="flex items-center justify-center rounded-lg border border-gray-200 p-2.5 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+            aria-label="About export"
+          >
+            <InfoIcon />
+          </button>
+        </div>
         {exportState === 'error' && (
           <p className="mt-1.5 text-xs text-red-600">{exportError}</p>
+        )}
+        {showExportInfo && (
+          <div className="mt-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs text-blue-800">
+            Downloads a snapshot of your athlete profile, readiness, training load, HRV/HR trends, and last 6 weeks of rides as a JSON file. Drop it into any AI assistant to get personalised analysis, recovery advice, or structured workout plans. For the best experience, use the{' '}
+            <a
+              href="https://github.com/estruyf/skill-cycling-plan-coach"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium underline"
+            >
+              Cycling Plan Coach skill
+            </a>{' '}
+            for Claude.
+          </div>
         )}
 
         {state.status === 'ready' && state.items.length > 0 && (
