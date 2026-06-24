@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { listWorkouts, type WorkoutSummary } from '../lib/garmin-api';
+import { exportCoachData, listWorkouts, type WorkoutSummary } from '../lib/garmin-api';
 import Shell from './Shell';
-import { ChevronRightIcon, RefreshIcon, UploadIcon } from './icons';
+import { ChevronRightIcon, DownloadIcon, RefreshIcon, UploadIcon } from './icons';
 
 interface Props {
   /** Bumped by the parent to force a refetch (after import / delete). */
@@ -31,9 +31,23 @@ function durationLabel(secs?: number | null): string {
   return rem ? `${h}h ${rem}m` : `${h}h`;
 }
 
+type ExportState = 'idle' | 'loading' | 'done' | 'error';
+
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function WorkoutList({ version, onClose, onImport, onSelect }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [query, setQuery] = useState('');
+  const [exportState, setExportState] = useState<ExportState>('idle');
+  const [exportError, setExportError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +71,21 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
     return items;
   }, [state, query]);
 
+  async function handleExport() {
+    setExportState('loading');
+    setExportError('');
+    try {
+      const data = await exportCoachData();
+      const date = new Date().toISOString().slice(0, 10);
+      downloadJson(data, `garmin-coach-export-${date}.json`);
+      setExportState('done');
+      setTimeout(() => setExportState('idle'), 3000);
+    } catch (err) {
+      setExportError((err as Error).message);
+      setExportState('error');
+    }
+  }
+
   return (
     <Shell title="Garmin workouts" subtitle={state.status === 'ready' ? `${state.items.length} in your library` : undefined} onClose={onClose}>
       <div className="px-4 py-4">
@@ -68,6 +97,19 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
           <UploadIcon />
           Import a new workout
         </button>
+
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exportState === 'loading'}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+        >
+          <DownloadIcon />
+          {exportState === 'loading' ? 'Exporting…' : exportState === 'done' ? 'Downloaded!' : 'Export coach data'}
+        </button>
+        {exportState === 'error' && (
+          <p className="mt-1.5 text-xs text-red-600">{exportError}</p>
+        )}
 
         {state.status === 'ready' && state.items.length > 0 && (
           <input
