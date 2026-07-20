@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-07-20
+
+### Added
+
+- Pagination in the workout list — 25 workouts per page, with the page controls pinned to the bottom of the drawer
+- Creation date on each workout in the list, shown in your local date format
+
+### Changed
+
+- Only the workout list scrolls now — the import and export buttons stay pinned at the top of the drawer
+
 ## [1.3.0] - 2026-06-24
 
 ### Added

@@ -22,6 +22,7 @@ export interface WorkoutSummary {
   description?: string | null;
   sportType?: { sportTypeKey?: string };
   estimatedDurationInSecs?: number | null;
+  createdDate?: string | null;
   updatedDate?: string | null;
 }
 

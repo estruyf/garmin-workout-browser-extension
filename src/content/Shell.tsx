@@ -11,12 +11,15 @@ interface Props {
   onBack?: () => void;
   headerRight?: ReactNode;
   footer?: ReactNode;
+  /** Set false when the child manages its own scrolling (e.g. a scrollable list
+   *  under a pinned toolbar). The body then just fills the available height. */
+  scroll?: boolean;
   children: ReactNode;
 }
 
 /** The fixed right-side drawer frame: header (back / title / actions / close),
  *  a scrollable body, and an optional sticky footer. */
-export default function Shell({ title, subtitle, onClose, onBack, headerRight, footer, children }: Props) {
+export default function Shell({ title, subtitle, onClose, onBack, headerRight, footer, scroll = true, children }: Props) {
   return (
     <div
       style={{ zIndex: Z_INDEX }}
@@ -48,7 +51,7 @@ export default function Shell({ title, subtitle, onClose, onBack, headerRight, f
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto">{children}</div>
+      <div className={scroll ? 'flex-1 overflow-y-auto' : 'flex min-h-0 flex-1 flex-col'}>{children}</div>
 
       {footer && <footer className="border-t border-gray-100 px-4 py-3">{footer}</footer>}
     </div>

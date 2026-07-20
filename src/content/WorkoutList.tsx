@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { exportCoachData, listWorkouts, type WorkoutSummary } from '../lib/garmin-api';
 import Shell from './Shell';
@@ -31,7 +31,19 @@ function durationLabel(secs?: number | null): string {
   return rem ? `${h}h ${rem}m` : `${h}h`;
 }
 
+function dateLabel(value?: string | null): string {
+  if (!value) return '';
+  // Garmin sends UTC timestamps without a zone ("2025-07-19T22:12:03.0"), which
+  // JS would otherwise read as local time and roll back to the previous day.
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
+  const d = new Date(hasZone || !value.includes('T') ? value : `${value}Z`);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 type ExportState = 'idle' | 'loading' | 'done' | 'error';
+
+const PAGE_SIZE = 25;
 
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -49,6 +61,7 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
   const [exportState, setExportState] = useState<ExportState>('idle');
   const [exportError, setExportError] = useState('');
   const [showExportInfo, setShowExportInfo] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +85,21 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
     return items;
   }, [state, query]);
 
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // A new search or a refetch should land you back on the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [query, version]);
+
+  // Turning a page starts you at the top of the new one.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: 0 });
+  }, [safePage]);
+
   async function handleExport() {
     setExportState('loading');
     setExportError('');
@@ -88,8 +116,13 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
   }
 
   return (
-    <Shell title="Garmin workouts" subtitle={state.status === 'ready' ? `${state.items.length} in your library` : undefined} onClose={onClose}>
-      <div className="px-4 py-4">
+    <Shell
+      title="Garmin workouts"
+      subtitle={state.status === 'ready' ? `${state.items.length} in your library` : undefined}
+      onClose={onClose}
+      scroll={false}
+    >
+      <div className="shrink-0 border-b border-gray-100 px-4 py-4">
         <button
           type="button"
           onClick={onImport}
@@ -147,7 +180,7 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
         )}
       </div>
 
-      <div className="px-2 pb-4">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {state.status === 'loading' && <p className="px-2 py-6 text-center text-sm text-gray-400">Loading your workouts…</p>}
 
         {state.status === 'error' && (
@@ -172,8 +205,14 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
         )}
 
         <ul className="space-y-1">
-          {filtered.map((w) => {
-            const meta = [sportLabel(w.sportType?.sportTypeKey), durationLabel(w.estimatedDurationInSecs)].filter(Boolean).join(' · ');
+          {visible.map((w) => {
+            const meta = [
+              sportLabel(w.sportType?.sportTypeKey),
+              durationLabel(w.estimatedDurationInSecs),
+              dateLabel(w.createdDate ?? w.updatedDate),
+            ]
+              .filter(Boolean)
+              .join(' · ');
             return (
               <li key={w.workoutId}>
                 <button
@@ -194,6 +233,30 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
           })}
         </ul>
       </div>
+
+      {state.status === 'ready' && filtered.length > PAGE_SIZE && (
+        <div className="flex shrink-0 items-center justify-between border-t border-gray-100 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-gray-500">
+            Page {safePage} of {pageCount}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            disabled={safePage === pageCount}
+            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </Shell>
   );
 }
