@@ -1,17 +1,21 @@
 # Garmin Workout Importer
 
-A Chrome extension that manages your **Garmin Connect** workouts and imports new
-ones from `.json` or `.zwo` (Zwift) files. ZWO files are converted to Garmin's
-structured-workout JSON format in the browser before upload.
+A Chrome extension that manages your **Garmin Connect** workouts: build new ones
+from scratch, or import them from `.json` or `.zwo` (Zwift) files. ZWO files are
+converted to Garmin's structured-workout JSON format in the browser before
+upload.
 
 The UI is an **in-page drawer**. A floating **Workouts** button sits at the
 bottom-right of every Garmin Connect page; clicking it slides out a drawer that:
 
 - **Lists your existing workouts** — search them, and click one to see its power
   profile, details, open it on Garmin, delete, clone, or edit it.
-- **Imports a new workout** — the button at the top opens the import flow (file
-  picker or drag-and-drop, FTP, power zones, an FTP-adaptive preview). You can
-  edit, add, reorder, or delete steps before importing.
+- **Creates a workout** — start from a template (endurance, sweet spot,
+  threshold, VO₂ max, over–unders, recovery) or from nothing, add and reorder
+  steps, set power in watts or `% FTP`, and send it to Garmin. No file needed.
+- **Imports a new workout** — the import flow takes a file (picker or
+  drag-and-drop) plus your FTP and shows power zones and an FTP-adaptive
+  preview. You can edit, add, reorder, or delete steps before importing.
 - **Exports coach data** — downloads a `garmin-coach-export-YYYY-MM-DD.json`
   snapshot (athlete profile, readiness, training load, trend data, and your last
   6 weeks of rides). Drop it into any AI (ChatGPT, Claude, Gemini, …) to get
@@ -43,12 +47,16 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
 2. Click the floating **Workouts** button (bottom-right) — or the extension's
    toolbar icon — to open the drawer. It lists your workouts.
 3. Click a workout to see its power-profile graph and details, or use
-   **Import a new workout** at the top.
-4. To import: pick a `.json` or `.zwo` file (or drag-and-drop it), enter your
+   **Create a workout** / **Import a file** at the top.
+4. To create: enter a name and your **FTP**, optionally pick a template, then
+   add, edit, reorder, or delete steps. Step power can be typed in watts or as
+   `% FTP`, and the preview chart updates as you go. Click **Create in Garmin**
+   when it looks right. Changing your FTP re-scales an untouched template.
+5. To import: pick a `.json` or `.zwo` file (or drag-and-drop it), enter your
    **FTP** in watts (for ZWO the `% FTP` targets convert to watts and the
    preview updates live), edit steps if needed, set the name, and click
    **Import to Garmin**.
-5. To export coach data: click the **Export** button in the workout list header.
+6. To export coach data: click the **Export** button in the workout list header.
    The downloaded JSON includes your athlete profile, today's readiness snapshot,
    training load metrics, HRV/HR trends, and the last 6 weeks of cycling
    activities. You can then paste or upload this file into an AI assistant
@@ -64,13 +72,15 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
   Shadow DOM (so Garmin's styles and ours stay isolated). It reads the file,
   converts ZWO → Garmin JSON, renders the power-profile preview (`WorkoutChart`)
   and power zones (`PowerZones`) that recompute as you change FTP.
-- On import it reads the page's `<meta name="csrf-token">` and POSTs to
+- On create/import it reads the page's `<meta name="csrf-token">` and POSTs to
   `connect.garmin.com/gc-api/workout-service/workout` — the same call the Garmin
   web app makes itself.
 - JSON files are normalized (server-managed fields stripped, step IDs cleared)
   the way Garmin expects for a freshly created workout.
-- Conversion/preview logic lives in `src/lib/` (`zwo.ts`, `workout-json.ts`,
-  `profile.ts`, `garmin-api.ts`).
+- Conversion/preview logic lives in `src/lib/`: `zwo.ts` (ZWO → Garmin),
+  `workout-json.ts` (JSON import), `workout-builder.ts` (new workouts and the
+  template catalogue), `workout-steps.ts` (step-tree edits), `profile.ts`
+  (power profile), `garmin-api.ts` (the gc-api client).
 
 ### ZWO conversion notes
 

@@ -209,3 +209,13 @@ export function profileNeedsFtp(blocks: ProfileBlock[]): boolean {
 export function totalDuration(blocks: ProfileBlock[]): number {
   return blocks.reduce((sum, b) => sum + b.durationSec, 0);
 }
+
+/** Human-readable workout length, e.g. "45 min" or "1h 20m" ("" when unknown). */
+export function durationLabel(secs: number): string {
+  const m = Math.round(secs / 60);
+  if (m <= 0) return '';
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+}

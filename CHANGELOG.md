@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Create a workout** — new button in the workout list that opens a builder: name it, add steps, and send it straight to Garmin without a file
+- Six one-click templates (endurance ride, sweet spot 3×15, threshold 4×8, VO₂ max 5×4, over–unders 3×12, recovery spin) whose power targets are set as a percentage of your FTP, so they re-scale when you change it
+- Power targets can be typed as `% FTP` instead of watts anywhere in the step editor — the watt equivalent is shown next to the fields
+- Optional workout description on a new workout
+
+### Changed
+
+- New steps start with a power target prefilled from your FTP instead of 0 W
+- Steps added in the editor are numbered before a workout is created, so Garmin keeps them in the order you see
+
 ## [1.4.0] - 2026-07-20
 
 ### Added

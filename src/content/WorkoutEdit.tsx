@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
 
-import type { GarminWorkoutDetail } from '../lib/garmin-api';
 import { jsonProfile } from '../lib/profile';
+import { createRepeatGroup, createStep, type StepKind } from '../lib/workout-builder';
+import type { RawStep } from '../lib/workout-steps';
 import WorkoutChart from './WorkoutChart';
-
-type RawStep = Record<string, unknown>;
 
 function stepLabel(step: RawStep): string {
   if (step.type === 'RepeatGroupDTO') {
@@ -39,12 +38,12 @@ function stepMeta(step: RawStep): { duration: string; power: string } {
 // ─── Step type catalogue ─────────────────────────────────────────────────────
 
 const STEP_TYPE_DEFS = [
-  { key: 'interval', label: 'Interval', typeId: 3 },
-  { key: 'warmup', label: 'Warm-up', typeId: 1 },
-  { key: 'cooldown', label: 'Cool-down', typeId: 2 },
-  { key: 'recovery', label: 'Recovery', typeId: 4 },
-  { key: 'rest', label: 'Rest', typeId: 5 },
-  { key: 'repeat', label: 'Repeat group', typeId: null },
+  { key: 'interval', label: 'Interval' },
+  { key: 'warmup', label: 'Warm-up' },
+  { key: 'cooldown', label: 'Cool-down' },
+  { key: 'recovery', label: 'Recovery' },
+  { key: 'rest', label: 'Rest' },
+  { key: 'repeat', label: 'Repeat group' },
 ] as const;
 
 function buildNewStep(
@@ -56,39 +55,69 @@ function buildNewStep(
   hi: number,
   reps: number,
 ): RawStep {
-  if (typeKey === 'repeat') {
-    const n = Math.max(1, Math.round(reps));
-    return {
-      type: 'RepeatGroupDTO',
-      stepId: null,
-      stepOrder: 0,
-      numberOfIterations: n,
-      endCondition: { conditionTypeId: 7, conditionTypeKey: 'iterations', displayable: false, displayOrder: 7 },
-      endConditionValue: n,
-      workoutSteps: [],
-    };
-  }
-  const def = STEP_TYPE_DEFS.find((t) => t.key === typeKey) ?? STEP_TYPE_DEFS[0];
-  return {
-    type: 'ExecutableStepDTO',
-    stepId: null,
-    stepOrder: 0,
-    stepType: { stepTypeId: def.typeId, stepTypeKey: def.key, displayOrder: def.typeId },
-    endCondition: { conditionTypeId: 2, conditionTypeKey: 'time', displayable: true, displayOrder: 1 },
-    endConditionValue: Math.max(0, mins * 60 + secs),
-    targetType: withPower
-      ? { workoutTargetTypeId: 2, workoutTargetTypeKey: 'power.zone', displayOrder: 2 }
-      : { workoutTargetTypeId: 1, workoutTargetTypeKey: 'no.target', displayOrder: 1 },
-    targetValueOne: withPower ? Math.max(0, lo) : null,
-    targetValueTwo: withPower ? Math.max(0, hi) : null,
-    targetValueUnit: null,
-    zoneNumber: null,
-    secondaryTargetType: null,
-    secondaryTargetValueOne: null,
-    secondaryTargetValueTwo: null,
-    category: null,
-    description: null,
-  };
+  if (typeKey === 'repeat') return createRepeatGroup(reps);
+  return createStep({
+    kind: typeKey as StepKind,
+    durationSec: mins * 60 + secs,
+    watts: withPower ? [Math.min(lo, hi), Math.max(lo, hi)] : undefined,
+  });
+}
+
+// ─── Power target input (watts, or % of FTP when the FTP is known) ────────────
+
+interface PowerFieldsProps {
+  ftp: number;
+  lo: number;
+  hi: number;
+  onChange: (lo: number, hi: number) => void;
+  /** Inputs sit on a tinted background in the add form and need to stay white. */
+  white?: boolean;
+}
+
+function PowerFields({ ftp, lo, hi, onChange, white }: PowerFieldsProps) {
+  const [asPct, setAsPct] = useState(false);
+  const pct = ftp > 0 && asPct;
+  const toField = (watts: number) => (pct ? Math.round((watts / ftp) * 100) : watts);
+  const toWatts = (value: number) => (pct ? Math.round((value / 100) * ftp) : value);
+  const input = `w-20 rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500${white ? ' bg-white' : ''}`;
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-20 text-xs text-gray-500">Power</span>
+      <input
+        type="number"
+        min={0}
+        value={toField(lo)}
+        onChange={(e) => onChange(toWatts(parseInt(e.target.value, 10) || 0), hi)}
+        className={input}
+      />
+      <span className="text-xs text-gray-400">–</span>
+      <input
+        type="number"
+        min={0}
+        value={toField(hi)}
+        onChange={(e) => onChange(lo, toWatts(parseInt(e.target.value, 10) || 0))}
+        className={input}
+      />
+      {ftp > 0 ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setAsPct((v) => !v)}
+            className="rounded border border-gray-300 px-1.5 py-0.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+            title="Switch between watts and % of FTP"
+          >
+            {pct ? '% FTP' : 'W'}
+          </button>
+          <span className="text-xs text-gray-400">
+            {pct ? `${lo}–${hi} W` : `${Math.round((lo / ftp) * 100)}–${Math.round((hi / ftp) * 100)}% FTP`}
+          </span>
+        </>
+      ) : (
+        <span className="text-xs text-gray-400">W</span>
+      )}
+    </div>
+  );
 }
 
 // ─── Drag-and-drop tracker (module-level to coordinate between list instances) ─
@@ -99,12 +128,13 @@ let activeDragListId: string | null = null;
 
 interface EditFormProps {
   step: RawStep;
+  ftp: number;
   onApply: (changes: Record<string, unknown>) => void;
   onRemove: () => void;
   onClose: () => void;
 }
 
-function StepEditForm({ step, onApply, onRemove, onClose }: EditFormProps) {
+function StepEditForm({ step, ftp, onApply, onRemove, onClose }: EditFormProps) {
   const isRepeat = step.type === 'RepeatGroupDTO';
   const ec = step.endCondition as Record<string, unknown> | undefined;
   const isTime = !isRepeat && ec?.conditionTypeKey === 'time';
@@ -171,25 +201,15 @@ function StepEditForm({ step, onApply, onRemove, onClose }: EditFormProps) {
         </div>
       )}
       {hasPower && (
-        <div className="flex items-center gap-2">
-          <span className="w-20 text-xs text-gray-500">Power</span>
-          <input
-            type="number"
-            min={0}
-            value={lo}
-            onChange={(e) => setLo(parseInt(e.target.value, 10) || 0)}
-            className="w-20 rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
-          />
-          <span className="text-xs text-gray-400">–</span>
-          <input
-            type="number"
-            min={0}
-            value={hi}
-            onChange={(e) => setHi(parseInt(e.target.value, 10) || 0)}
-            className="w-20 rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500"
-          />
-          <span className="text-xs text-gray-400">W</span>
-        </div>
+        <PowerFields
+          ftp={ftp}
+          lo={lo}
+          hi={hi}
+          onChange={(nextLo, nextHi) => {
+            setLo(nextLo);
+            setHi(nextHi);
+          }}
+        />
       )}
       <div className="flex items-center gap-2 pt-1">
         <button
@@ -221,17 +241,20 @@ function StepEditForm({ step, onApply, onRemove, onClose }: EditFormProps) {
 // ─── Add step form ────────────────────────────────────────────────────────────
 
 interface AddStepFormProps {
+  ftp: number;
   onAdd: (step: RawStep) => void;
   onClose: () => void;
 }
 
-function AddStepForm({ onAdd, onClose }: AddStepFormProps) {
+function AddStepForm({ ftp, onAdd, onClose }: AddStepFormProps) {
   const [typeKey, setTypeKey] = useState('interval');
   const [mins, setMins] = useState(5);
   const [secs, setSecs] = useState(0);
-  const [withPower, setWithPower] = useState(false);
-  const [lo, setLo] = useState(0);
-  const [hi, setHi] = useState(0);
+  // With a known FTP a power target is the common case, so start it on and
+  // prefilled with an endurance-ish band the athlete can nudge.
+  const [withPower, setWithPower] = useState(ftp > 0);
+  const [lo, setLo] = useState(ftp > 0 ? Math.round(ftp * 0.75) : 0);
+  const [hi, setHi] = useState(ftp > 0 ? Math.round(ftp * 0.85) : 0);
   const [reps, setReps] = useState(3);
 
   const isRepeat = typeKey === 'repeat';
@@ -296,25 +319,16 @@ function AddStepForm({ onAdd, onClose }: AddStepFormProps) {
           </label>
 
           {withPower && (
-            <div className="flex items-center gap-2">
-              <span className="w-20 text-xs text-gray-500">Power</span>
-              <input
-                type="number"
-                min={0}
-                value={lo}
-                onChange={(e) => setLo(parseInt(e.target.value, 10) || 0)}
-                className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500"
-              />
-              <span className="text-xs text-gray-400">–</span>
-              <input
-                type="number"
-                min={0}
-                value={hi}
-                onChange={(e) => setHi(parseInt(e.target.value, 10) || 0)}
-                className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-sm outline-none focus:border-blue-500"
-              />
-              <span className="text-xs text-gray-400">W</span>
-            </div>
+            <PowerFields
+              ftp={ftp}
+              lo={lo}
+              hi={hi}
+              white
+              onChange={(nextLo, nextHi) => {
+                setLo(nextLo);
+                setHi(nextHi);
+              }}
+            />
           )}
         </>
       )}
@@ -361,6 +375,7 @@ interface StepListProps {
   segIdx: number;
   pathPrefix: number[];
   depth: number;
+  ftp: number;
   selectedKey: string | null;
   addingKey: string | null;
   onSelect: (key: string | null) => void;
@@ -376,6 +391,7 @@ function StepList({
   segIdx,
   pathPrefix,
   depth,
+  ftp,
   selectedKey,
   addingKey,
   onSelect,
@@ -509,6 +525,7 @@ const isDragging = dragFrom === i;
               {isSelected && (
                 <StepEditForm
                   step={step}
+                  ftp={ftp}
                   onApply={(ch) => { onEdit(segIdx, path, ch); onSelect(null); }}
                   onRemove={() => { onRemove(segIdx, path); onSelect(null); }}
                   onClose={() => onSelect(null)}
@@ -527,6 +544,7 @@ const isDragging = dragFrom === i;
                     segIdx={segIdx}
                     pathPrefix={path}
                     depth={depth + 1}
+                    ftp={ftp}
                     selectedKey={selectedKey}
                     addingKey={addingKey}
                     onSelect={onSelect}
@@ -551,6 +569,7 @@ const isDragging = dragFrom === i;
       {/* Add step at this level */}
       {addingKey === addKey ? (
         <AddStepForm
+          ftp={ftp}
           onAdd={(s) => { onAdd(segIdx, pathPrefix, s); onSetAddingKey(null); }}
           onClose={() => onSetAddingKey(null)}
         />
@@ -572,8 +591,15 @@ const isDragging = dragFrom === i;
 
 // ─── Public component ─────────────────────────────────────────────────────────
 
+/** Anything carrying a Garmin step tree — a saved workout or an unsaved draft. */
+export interface EditableWorkout {
+  workoutSegments?: unknown;
+  [key: string]: unknown;
+}
+
 export interface WorkoutEditProps {
-  detail: GarminWorkoutDetail;
+  detail: EditableWorkout;
+  /** Used to colour the preview and to offer % FTP power entry; 0 when unknown. */
   ftp: number;
   onEdit: (segIdx: number, path: number[], changes: Record<string, unknown>) => void;
   onRemove: (segIdx: number, path: number[]) => void;
@@ -605,6 +631,7 @@ export default function WorkoutEdit({ detail, ftp, onEdit, onRemove, onReorder, 
               segIdx={si}
               pathPrefix={[]}
               depth={0}
+              ftp={ftp}
               selectedKey={selectedKey}
               addingKey={addingKey}
               onSelect={setSelectedKey}

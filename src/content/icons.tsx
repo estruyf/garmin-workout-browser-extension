@@ -25,6 +25,15 @@ export function UploadIcon({ size = 16 }: IconProps) {
   );
 }
 
+export function PlusIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
 export function CloseIcon({ size = 18 }: IconProps) {
   return (
     <svg {...base(size)}>

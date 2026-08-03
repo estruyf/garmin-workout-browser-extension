@@ -1,8 +1,15 @@
 import { useMemo, useState } from 'react';
 
-import { createWorkout, workoutUrl, type GarminWorkoutDetail } from '../lib/garmin-api';
+import { createWorkout, workoutUrl } from '../lib/garmin-api';
 import { jsonProfile, profileNeedsFtp, zwoProfile, type ProfileBlock } from '../lib/profile';
 import { normalizeWorkoutJson } from '../lib/workout-json';
+import {
+  addStepAtPath,
+  applyStepEdit,
+  removeStepAtPath,
+  renumberSteps,
+  reorderStepsAtPath,
+} from '../lib/workout-steps';
 import { zwoName, zwoToGarminPayload, type GarminWorkoutPayload } from '../lib/zwo';
 import PowerZones from './PowerZones';
 import Shell from './Shell';
@@ -40,75 +47,6 @@ function detectKind(fileName: string): FileKind | null {
 
 function payloadSportType(payload: GarminWorkoutPayload): string | undefined {
   return (payload as { sportType?: { sportTypeKey?: string } }).sportType?.sportTypeKey;
-}
-
-function getStepByPath(steps: Array<Record<string, unknown>>, path: number[]): Record<string, unknown> {
-  let step = steps[path[0]];
-  for (let i = 1; i < path.length; i++) {
-    step = (step.workoutSteps as Array<Record<string, unknown>>)[path[i]];
-  }
-  return step;
-}
-
-function applyStepEdit(
-  payload: GarminWorkoutPayload,
-  segIdx: number,
-  path: number[],
-  changes: Record<string, unknown>,
-): GarminWorkoutPayload {
-  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  Object.assign(getStepByPath(segs[segIdx].workoutSteps, path), changes);
-  return next;
-}
-
-function removeStepAtPath(
-  payload: GarminWorkoutPayload,
-  segIdx: number,
-  path: number[],
-): GarminWorkoutPayload {
-  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  let steps = segs[segIdx].workoutSteps;
-  for (let i = 0; i < path.length - 1; i++) {
-    steps = (steps[path[i]].workoutSteps as Array<Record<string, unknown>>);
-  }
-  steps.splice(path[path.length - 1], 1);
-  return next;
-}
-
-function reorderStepsAtPath(
-  payload: GarminWorkoutPayload,
-  segIdx: number,
-  parentPath: number[],
-  fromIdx: number,
-  toIdx: number,
-): GarminWorkoutPayload {
-  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  let steps = segs[segIdx].workoutSteps;
-  for (let i = 0; i < parentPath.length; i++) {
-    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
-  }
-  const [item] = steps.splice(fromIdx, 1);
-  steps.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, item);
-  return next;
-}
-
-function addStepAtPath(
-  payload: GarminWorkoutPayload,
-  segIdx: number,
-  parentPath: number[],
-  newStep: Record<string, unknown>,
-): GarminWorkoutPayload {
-  const next = JSON.parse(JSON.stringify(payload)) as GarminWorkoutPayload;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  let steps = segs[segIdx].workoutSteps;
-  for (let i = 0; i < parentPath.length; i++) {
-    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
-  }
-  steps.push(newStep);
-  return next;
 }
 
 export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }: Props) {
@@ -236,7 +174,8 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
     if (!canImport) return;
     setStatus({ state: 'importing' });
     try {
-      const payload = editedPayload ?? buildPayload();
+      // Steps added in the editor carry no order of their own, so number them.
+      const payload = editedPayload ? renumberSteps(editedPayload) : buildPayload();
       const created = await createWorkout(payload);
       setStatus({
         state: 'done',
@@ -296,7 +235,7 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
     >
       {subView === 'edit' && editedPayload ? (
         <WorkoutEdit
-          detail={editedPayload as unknown as GarminWorkoutDetail}
+          detail={editedPayload}
           ftp={ftpKnown ? Math.round(ftpValue) : 0}
           onEdit={handleStepEdit}
           onRemove={handleStepRemove}

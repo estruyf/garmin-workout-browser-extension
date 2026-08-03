@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { fetchCyclingFtp, type WorkoutSummary } from '../lib/garmin-api';
 import { getStoredFtp, setStoredFtp } from '../lib/storage';
+import CreatePanel from './CreatePanel';
 import ImportPanel from './ImportPanel';
 import WorkoutDetail from './WorkoutDetail';
 import WorkoutList from './WorkoutList';
@@ -9,7 +10,7 @@ import { DumbbellIcon } from './icons';
 
 const Z_INDEX = 2147483646;
 
-type View = 'list' | 'import' | 'detail';
+type View = 'list' | 'create' | 'import' | 'detail';
 
 export default function App() {
   const [open, setOpen] = useState(false);
@@ -75,6 +76,18 @@ export default function App() {
     );
   }
 
+  if (view === 'create') {
+    return (
+      <CreatePanel
+        ftp={ftp}
+        setFtp={setFtp}
+        onClose={close}
+        onBack={() => setView('list')}
+        onCreated={() => setListVersion((v) => v + 1)}
+      />
+    );
+  }
+
   if (view === 'import') {
     return (
       <ImportPanel
@@ -108,6 +121,7 @@ export default function App() {
     <WorkoutList
       version={listVersion}
       onClose={close}
+      onCreate={() => setView('create')}
       onImport={() => setView('import')}
       onSelect={(w) => {
         setSelected(w);

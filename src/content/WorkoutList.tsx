@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { exportCoachData, listWorkouts, type WorkoutSummary } from '../lib/garmin-api';
 import Shell from './Shell';
-import { ChevronRightIcon, DownloadIcon, InfoIcon, RefreshIcon, UploadIcon } from './icons';
+import { ChevronRightIcon, DownloadIcon, InfoIcon, PlusIcon, RefreshIcon, UploadIcon } from './icons';
 
 interface Props {
-  /** Bumped by the parent to force a refetch (after import / delete). */
+  /** Bumped by the parent to force a refetch (after create / import / delete). */
   version: number;
   onClose: () => void;
+  onCreate: () => void;
   onImport: () => void;
   onSelect: (workout: WorkoutSummary) => void;
 }
@@ -55,7 +56,7 @@ function downloadJson(data: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function WorkoutList({ version, onClose, onImport, onSelect }: Props) {
+export default function WorkoutList({ version, onClose, onCreate, onImport, onSelect }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [exportState, setExportState] = useState<ExportState>('idle');
@@ -123,14 +124,24 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
       scroll={false}
     >
       <div className="shrink-0 border-b border-gray-100 px-4 py-4">
-        <button
-          type="button"
-          onClick={onImport}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          <UploadIcon />
-          Import a new workout
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onCreate}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <PlusIcon />
+            Create a workout
+          </button>
+          <button
+            type="button"
+            onClick={onImport}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          >
+            <UploadIcon />
+            Import a file
+          </button>
+        </div>
 
         <div className="mt-2 flex items-center gap-1.5">
           <button
@@ -197,7 +208,7 @@ export default function WorkoutList({ version, onClose, onImport, onSelect }: Pr
         )}
 
         {state.status === 'ready' && state.items.length === 0 && (
-          <p className="px-2 py-6 text-center text-sm text-gray-400">No workouts yet. Import one to get started.</p>
+          <p className="px-2 py-6 text-center text-sm text-gray-400">No workouts yet. Create or import one to get started.</p>
         )}
 
         {state.status === 'ready' && state.items.length > 0 && filtered.length === 0 && (

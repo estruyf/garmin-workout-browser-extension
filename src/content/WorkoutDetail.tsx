@@ -9,7 +9,8 @@ import {
   type GarminWorkoutDetail,
   type WorkoutSummary,
 } from '../lib/garmin-api';
-import { jsonProfile, totalDuration, type ProfileBlock } from '../lib/profile';
+import { durationLabel, jsonProfile, totalDuration, type ProfileBlock } from '../lib/profile';
+import { addStepAtPath, applyStepEdit, removeStepAtPath, reorderStepsAtPath } from '../lib/workout-steps';
 import PowerZones from './PowerZones';
 import Shell from './Shell';
 import WorkoutChart from './WorkoutChart';
@@ -46,15 +47,6 @@ function sportLabel(key?: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
 }
 
-function durationLabel(secs: number): string {
-  const m = Math.round(secs / 60);
-  if (m <= 0) return '';
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem ? `${h}h ${rem}m` : `${h}h`;
-}
-
 function scaleSteps(steps: unknown[], scale: number): void {
   for (const step of steps as Array<Record<string, unknown>>) {
     if ((step.targetType as Record<string, unknown> | undefined)?.workoutTargetTypeKey === 'power.zone') {
@@ -63,75 +55,6 @@ function scaleSteps(steps: unknown[], scale: number): void {
     }
     if (Array.isArray(step.workoutSteps)) scaleSteps(step.workoutSteps, scale);
   }
-}
-
-function getStepByPath(steps: Array<Record<string, unknown>>, path: number[]): Record<string, unknown> {
-  let step = steps[path[0]];
-  for (let i = 1; i < path.length; i++) {
-    step = (step.workoutSteps as Array<Record<string, unknown>>)[path[i]];
-  }
-  return step;
-}
-
-function removeStepAtPath(
-  detail: GarminWorkoutDetail,
-  segIdx: number,
-  path: number[],
-): GarminWorkoutDetail {
-  const next = JSON.parse(JSON.stringify(detail)) as GarminWorkoutDetail;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  let steps = segs[segIdx].workoutSteps;
-  for (let i = 0; i < path.length - 1; i++) {
-    steps = (steps[path[i]].workoutSteps as Array<Record<string, unknown>>);
-  }
-  steps.splice(path[path.length - 1], 1);
-  return next;
-}
-
-function reorderStepsAtPath(
-  detail: GarminWorkoutDetail,
-  segIdx: number,
-  parentPath: number[],
-  fromIdx: number,
-  toIdx: number,
-): GarminWorkoutDetail {
-  const next = JSON.parse(JSON.stringify(detail)) as GarminWorkoutDetail;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  let steps = segs[segIdx].workoutSteps;
-  for (let i = 0; i < parentPath.length; i++) {
-    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
-  }
-  const [item] = steps.splice(fromIdx, 1);
-  steps.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, item);
-  return next;
-}
-
-function addStepAtPath(
-  detail: GarminWorkoutDetail,
-  segIdx: number,
-  parentPath: number[],
-  newStep: Record<string, unknown>,
-): GarminWorkoutDetail {
-  const next = JSON.parse(JSON.stringify(detail)) as GarminWorkoutDetail;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  let steps = segs[segIdx].workoutSteps;
-  for (let i = 0; i < parentPath.length; i++) {
-    steps = (steps[parentPath[i]].workoutSteps as Array<Record<string, unknown>>);
-  }
-  steps.push(newStep);
-  return next;
-}
-
-function applyStepEdit(
-  detail: GarminWorkoutDetail,
-  segIdx: number,
-  path: number[],
-  changes: Record<string, unknown>,
-): GarminWorkoutDetail {
-  const next = JSON.parse(JSON.stringify(detail)) as GarminWorkoutDetail;
-  const segs = next.workoutSegments as Array<{ workoutSteps: Array<Record<string, unknown>> }>;
-  Object.assign(getStepByPath(segs[segIdx].workoutSteps, path), changes);
-  return next;
 }
 
 function buildClonePayload(detail: GarminWorkoutDetail, name: string): Record<string, unknown> {
