@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Download a workout** — a workout's detail view can now save it as `.json` (a full backup this extension can import again) or as `.zwo`, so a Garmin session can be ridden in Zwift
+- Anything Zwift cannot express — heart-rate targets, distance or lap-button steps, repeat groups that are not a simple on/off pair — is reported under the download buttons instead of silently changing the workout
+- **Bulk actions in the workout list** — checkboxes on every workout, with "select page" and "select all matching" shortcuts; the selection is kept while you page through the list or change the search
+- Bulk delete removes the whole selection in one confirmed step, and reports any workout Garmin refused to delete by name instead of failing the run
+- Bulk download saves each selected workout as its own `.json` or `.zwo` file; non-cycling workouts are skipped for ZWO and listed afterwards, and workouts sharing a name get a numbered suffix so no download is overwritten
 - **Create a workout** — new button in the workout list that opens a builder: name it, add steps, and send it straight to Garmin without a file
 - Six one-click templates (endurance ride, sweet spot 3×15, threshold 4×8, VO₂ max 5×4, over–unders 3×12, recovery spin) whose power targets are set as a percentage of your FTP, so they re-scale when you change it
 - Power targets can be typed as `% FTP` instead of watts anywhere in the step editor — the watt equivalent is shown next to the fields

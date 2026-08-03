@@ -10,6 +10,13 @@ bottom-right of every Garmin Connect page; clicking it slides out a drawer that:
 
 - **Lists your existing workouts** — search them, and click one to see its power
   profile, details, open it on Garmin, delete, clone, or edit it.
+- **Downloads a workout** — from the detail view, save any workout as `.json`
+  (a full backup you can re-import) or as `.zwo` to ride the same session in
+  Zwift.
+- **Bulk actions** — tick workouts in the list (or select a whole page, or every
+  workout matching your search) and delete or download them in one go. Handy for
+  clearing out a finished season. Selection survives paging and searching, and
+  anything that fails or gets skipped is listed by name afterwards.
 - **Creates a workout** — start from a template (endurance, sweet spot,
   threshold, VO₂ max, over–unders, recovery) or from nothing, add and reorder
   steps, set power in watts or `% FTP`, and send it to Garmin. No file needed.
@@ -56,7 +63,12 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
    **FTP** in watts (for ZWO the `% FTP` targets convert to watts and the
    preview updates live), edit steps if needed, set the name, and click
    **Import to Garmin**.
-6. To export coach data: click the **Export** button in the workout list header.
+6. To download a workout: open it from the list and use **JSON** or **ZWO**
+   under *Download a copy*. JSON is a faithful backup that this extension can
+   import again; ZWO opens in Zwift and needs your FTP (it converts the watt
+   targets back to `% FTP`). Anything Zwift cannot express is listed under the
+   buttons after the download.
+7. To export coach data: click the **Export** button in the workout list header.
    The downloaded JSON includes your athlete profile, today's readiness snapshot,
    training load metrics, HRV/HR trends, and the last 6 weeks of cycling
    activities. You can then paste or upload this file into an AI assistant
@@ -78,9 +90,10 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
 - JSON files are normalized (server-managed fields stripped, step IDs cleared)
   the way Garmin expects for a freshly created workout.
 - Conversion/preview logic lives in `src/lib/`: `zwo.ts` (ZWO → Garmin),
-  `workout-json.ts` (JSON import), `workout-builder.ts` (new workouts and the
-  template catalogue), `workout-steps.ts` (step-tree edits), `profile.ts`
-  (power profile), `garmin-api.ts` (the gc-api client).
+  `zwo-export.ts` (Garmin → ZWO), `workout-json.ts` (JSON import),
+  `workout-builder.ts` (new workouts and the template catalogue),
+  `workout-steps.ts` (step-tree edits), `profile.ts` (power profile),
+  `download.ts` (file downloads), `garmin-api.ts` (the gc-api client).
 
 ### ZWO conversion notes
 
@@ -94,6 +107,20 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
 - **Cadence** — ZWO `Cadence` / `CadenceResting` become a Garmin secondary
   cadence target on the step.
 - **Notes** — ZWO `<textevent>` messages become the step's description.
+
+### ZWO export notes
+
+Going the other way (Garmin → ZWO) is lossier, because ZWO is a cycling-only,
+`% FTP` format:
+
+- **Power** — Garmin's watt targets are divided by your FTP. Warm-up and
+  cool-down steps become `Warmup` / `Cooldown` ramps across their watt band;
+  every other step becomes a flat `SteadyState` at the middle of its band.
+- **Repeats** — a repeat group of exactly two steps becomes an `IntervalsT`.
+  Any other repeat group is written out once per repetition, since ZWO has no
+  general repeat container.
+- **Skipped** — steps with a heart-rate target become `FreeRide`, and steps that
+  end on distance or a lap-button press are dropped. The download reports both.
 
 ## Commands
 

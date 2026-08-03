@@ -9,13 +9,15 @@ import {
   type GarminWorkoutDetail,
   type WorkoutSummary,
 } from '../lib/garmin-api';
+import { downloadJson, downloadText, fileStem } from '../lib/download';
 import { durationLabel, jsonProfile, totalDuration, type ProfileBlock } from '../lib/profile';
 import { addStepAtPath, applyStepEdit, removeStepAtPath, reorderStepsAtPath } from '../lib/workout-steps';
+import { canExportZwo, garminToZwo } from '../lib/zwo-export';
 import PowerZones from './PowerZones';
 import Shell from './Shell';
 import WorkoutChart from './WorkoutChart';
 import WorkoutEdit from './WorkoutEdit';
-import { CopyIcon, EditIcon, TrashIcon } from './icons';
+import { CopyIcon, DownloadIcon, EditIcon, TrashIcon } from './icons';
 
 interface Props {
   summary: WorkoutSummary;
@@ -34,6 +36,11 @@ type LoadState =
 type UpdateStatus = { state: 'idle' } | { state: 'updating' } | { state: 'done' } | { state: 'error'; message: string };
 
 type EditSaveStatus = { state: 'idle' } | { state: 'saving' } | { state: 'error'; message: string };
+
+type DownloadStatus =
+  | { state: 'idle' }
+  | { state: 'done'; filename: string; warnings: string[] }
+  | { state: 'error'; message: string };
 
 type ClonePhase =
   | { phase: 'idle' }
@@ -104,9 +111,13 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
   // Clone
   const [cloneState, setCloneState] = useState<ClonePhase>({ phase: 'idle' });
 
+  // Download
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({ state: 'idle' });
+
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
+    setDownloadStatus({ state: 'idle' });
     getWorkoutDetail(summary.workoutId)
       .then((detail) => { if (!cancelled) setState({ status: 'ready', detail }); })
       .catch((err: unknown) => { if (!cancelled) setState({ status: 'error', message: (err as Error).message }); });
@@ -125,6 +136,18 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
     (state.status === 'ready' ? state.detail.sportType?.sportTypeKey : undefined);
   const description = (state.status === 'ready' ? state.detail.description : summary.description) ?? '';
   const meta = [sportLabel(sportType), duration].filter(Boolean).join(' · ');
+
+  // ZWO power is a fraction of FTP, so the watt targets have to be divided by the
+  // FTP they were written against — an FTP typed but not yet applied is not that.
+  const zwoFtp = baseFtp > 0 ? baseFtp : ftpNum;
+
+  // ZWO is a cycling, %FTP-based format, so it needs both a bike workout and an FTP.
+  const zwoBlockedReason = !canExportZwo(sportType)
+    ? 'ZWO export is only available for cycling workouts.'
+    : zwoFtp <= 0
+      ? 'Set your FTP above to export this workout as ZWO.'
+      : undefined;
+  const zwoAvailable = !zwoBlockedReason;
 
   async function onUpdateFtp() {
     if (state.status !== 'ready' || !ftpChanged) return;
@@ -186,6 +209,25 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
       setEditSaveStatus({ state: 'idle' });
     } catch (err) {
       setEditSaveStatus({ state: 'error', message: (err as Error).message });
+    }
+  }
+
+  function onDownloadJson() {
+    if (state.status !== 'ready') return;
+    const filename = `${fileStem(summary.workoutName)}.json`;
+    downloadJson(state.detail, filename);
+    setDownloadStatus({ state: 'done', filename, warnings: [] });
+  }
+
+  function onDownloadZwo() {
+    if (state.status !== 'ready') return;
+    try {
+      const { xml, warnings } = garminToZwo(state.detail, zwoFtp);
+      const filename = `${fileStem(summary.workoutName)}.zwo`;
+      downloadText(xml, filename, 'application/xml');
+      setDownloadStatus({ state: 'done', filename, warnings });
+    } catch (err) {
+      setDownloadStatus({ state: 'error', message: (err as Error).message });
     }
   }
 
@@ -332,6 +374,43 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
               >
                 Open in Garmin Connect
               </a>
+
+              {/* Download */}
+              <div className="space-y-2 border-t border-gray-100 pt-3">
+                <span className="block text-xs font-medium text-gray-600">Download a copy</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onDownloadJson}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-800"
+                  >
+                    <DownloadIcon /> JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDownloadZwo}
+                    disabled={!zwoAvailable}
+                    title={zwoBlockedReason}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  >
+                    <DownloadIcon /> ZWO
+                  </button>
+                </div>
+                {zwoBlockedReason && <p className="text-xs text-gray-500">{zwoBlockedReason}</p>}
+                {downloadStatus.state === 'done' && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-green-600">Saved {downloadStatus.filename}</p>
+                    {downloadStatus.warnings.map((warning) => (
+                      <p key={warning} className="text-xs text-amber-600">
+                        {warning}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {downloadStatus.state === 'error' && (
+                  <p className="text-xs text-red-600">{downloadStatus.message}</p>
+                )}
+              </div>
 
               {/* Clone + Delete action area */}
               <div className="space-y-3 border-t border-gray-100 pt-3">

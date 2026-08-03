@@ -120,6 +120,7 @@ export default function App() {
   return (
     <WorkoutList
       version={listVersion}
+      ftp={ftp}
       onClose={close}
       onCreate={() => setView('create')}
       onImport={() => setView('import')}
@@ -127,6 +128,7 @@ export default function App() {
         setSelected(w);
         setView('detail');
       }}
+      onChanged={() => setListVersion((v) => v + 1)}
     />
   );
 }

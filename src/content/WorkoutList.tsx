@@ -1,16 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { bulkDelete, bulkExport, type BulkResult, type ExportFormat } from '../lib/bulk-actions';
+import { downloadJson } from '../lib/download';
 import { exportCoachData, listWorkouts, type WorkoutSummary } from '../lib/garmin-api';
+import { canExportZwo } from '../lib/zwo-export';
 import Shell from './Shell';
-import { ChevronRightIcon, DownloadIcon, InfoIcon, PlusIcon, RefreshIcon, UploadIcon } from './icons';
+import { ChevronRightIcon, DownloadIcon, InfoIcon, PlusIcon, RefreshIcon, TrashIcon, UploadIcon } from './icons';
 
 interface Props {
   /** Bumped by the parent to force a refetch (after create / import / delete). */
   version: number;
+  /** Shared FTP, needed to turn watt targets into ZWO's %FTP values. */
+  ftp: string;
   onClose: () => void;
   onCreate: () => void;
   onImport: () => void;
   onSelect: (workout: WorkoutSummary) => void;
+  /** Called after a bulk delete, so the parent can refetch the list. */
+  onChanged: () => void;
 }
 
 type State =
@@ -44,25 +51,40 @@ function dateLabel(value?: string | null): string {
 
 type ExportState = 'idle' | 'loading' | 'done' | 'error';
 
+/** What a bulk run is doing, so progress and results can be labelled. */
+type BulkAction = { kind: 'delete' } | { kind: 'export'; format: ExportFormat };
+
+type BulkState =
+  | { phase: 'idle' }
+  | { phase: 'confirm-delete' }
+  | { phase: 'running'; action: BulkAction; done: number; total: number }
+  | { phase: 'done'; action: BulkAction; result: BulkResult };
+
 const PAGE_SIZE = 25;
 
-function downloadJson(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+const NO_ITEMS: WorkoutSummary[] = [];
+
+function runningLabel(action: BulkAction): string {
+  return action.kind === 'delete' ? 'Deleting' : 'Exporting';
 }
 
-export default function WorkoutList({ version, onClose, onCreate, onImport, onSelect }: Props) {
+function resultHeadline(action: BulkAction, result: BulkResult): string {
+  const total = result.succeeded + result.failed.length + result.skipped.length;
+  const workouts = `${result.succeeded} of ${total} workout${total === 1 ? '' : 's'}`;
+  return action.kind === 'delete'
+    ? `Deleted ${workouts}.`
+    : `Downloaded ${workouts} as ${action.format.toUpperCase()}.`;
+}
+
+export default function WorkoutList({ version, ftp, onClose, onCreate, onImport, onSelect, onChanged }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [exportState, setExportState] = useState<ExportState>('idle');
   const [exportError, setExportError] = useState('');
   const [showExportInfo, setShowExportInfo] = useState(false);
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(() => new Set());
+  const [bulk, setBulk] = useState<BulkState>({ phase: 'idle' });
 
   useEffect(() => {
     let cancelled = false;
@@ -79,16 +101,26 @@ export default function WorkoutList({ version, onClose, onCreate, onImport, onSe
     };
   }, [version]);
 
+  const allItems = state.status === 'ready' ? state.items : NO_ITEMS;
+
   const filtered = useMemo(() => {
-    if (state.status !== 'ready') return [];
     const q = query.trim().toLowerCase();
-    const items = q ? state.items.filter((w) => w.workoutName?.toLowerCase().includes(q)) : state.items;
-    return items;
-  }, [state, query]);
+    return q ? allItems.filter((w) => w.workoutName?.toLowerCase().includes(q)) : allItems;
+  }, [allItems, query]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Selection is keyed by workout id, so it survives paging and searching.
+  const chosen = useMemo(() => allItems.filter((w) => selectedIds.has(w.workoutId)), [allItems, selectedIds]);
+
+  // A refetch replaces the list, so ids selected against the old one are dropped.
+  // The bulk result panel is left alone — a delete is what triggers the refetch,
+  // and its report of what failed has to outlive it.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [version]);
 
   // A new search or a refetch should land you back on the first page.
   useEffect(() => {
@@ -100,6 +132,47 @@ export default function WorkoutList({ version, onClose, onCreate, onImport, onSe
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
   }, [safePage]);
+
+  const running = bulk.phase === 'running';
+
+  const allVisibleSelected = visible.length > 0 && visible.every((w) => selectedIds.has(w.workoutId));
+  const someVisibleSelected = visible.some((w) => selectedIds.has(w.workoutId));
+
+  // "Some but not all" is a checkbox state only the DOM can express.
+  const pageBoxRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (pageBoxRef.current) pageBoxRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+  }, [someVisibleSelected, allVisibleSelected]);
+
+  const ftpValue = Number(ftp);
+  const ftpNum = Number.isFinite(ftpValue) && ftpValue > 0 ? Math.round(ftpValue) : 0;
+
+  // ZWO is a cycling, %FTP-based format, so it needs bike workouts and an FTP.
+  const zwoBlockedReason = !chosen.some((w) => canExportZwo(w.sportType?.sportTypeKey))
+    ? 'None of the selected workouts are cycling workouts.'
+    : ftpNum <= 0
+      ? 'Open a workout and set your FTP to export as ZWO.'
+      : undefined;
+
+  function toggleOne(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setMany(ids: number[], on: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
 
   async function handleExport() {
     setExportState('loading');
@@ -116,12 +189,152 @@ export default function WorkoutList({ version, onClose, onCreate, onImport, onSe
     }
   }
 
+  const onBulkProgress = (done: number) =>
+    setBulk((prev) => (prev.phase === 'running' ? { ...prev, done } : prev));
+
+  async function runBulkExport(format: ExportFormat) {
+    const items = chosen;
+    if (!items.length) return;
+    const action: BulkAction = { kind: 'export', format };
+    setBulk({ phase: 'running', action, done: 0, total: items.length });
+    const result = await bulkExport(items, format, ftpNum, onBulkProgress);
+    setBulk({ phase: 'done', action, result });
+  }
+
+  async function runBulkDelete() {
+    const items = chosen;
+    if (!items.length) return;
+    const action: BulkAction = { kind: 'delete' };
+    setBulk({ phase: 'running', action, done: 0, total: items.length });
+    const result = await bulkDelete(items, onBulkProgress);
+    setBulk({ phase: 'done', action, result });
+    setSelectedIds(new Set());
+    // Whatever was removed is gone from Garmin — pull a fresh list.
+    onChanged();
+  }
+
+  const bulkFooter =
+    chosen.length > 0 || bulk.phase !== 'idle' ? (
+      <div className="space-y-2">
+        {bulk.phase === 'running' && (
+          <div>
+            <p className="text-xs font-medium text-gray-600">
+              {runningLabel(bulk.action)} {Math.min(bulk.done + 1, bulk.total)} of {bulk.total}…
+            </p>
+            {bulk.action.kind === 'export' && bulk.total > 1 && (
+              <p className="mt-1 text-xs text-gray-400">Your browser may ask to allow multiple downloads.</p>
+            )}
+          </div>
+        )}
+
+        {bulk.phase === 'confirm-delete' && (
+          <div className="space-y-2 rounded-lg bg-red-50 px-3 py-2.5">
+            <p className="text-sm text-red-700">
+              Delete {chosen.length} workout{chosen.length === 1 ? '' : 's'} from Garmin? This can't be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={runBulkDelete}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700"
+              >
+                Delete {chosen.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulk({ phase: 'idle' })}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {bulk.phase === 'done' && (
+          <div
+            className={`space-y-1 rounded-lg px-3 py-2.5 ${
+              bulk.result.failed.length || bulk.result.skipped.length ? 'bg-amber-50' : 'bg-green-50'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p
+                className={`text-xs font-medium ${
+                  bulk.result.failed.length || bulk.result.skipped.length ? 'text-amber-800' : 'text-green-800'
+                }`}
+              >
+                {resultHeadline(bulk.action, bulk.result)}
+              </p>
+              <button
+                type="button"
+                onClick={() => setBulk({ phase: 'idle' })}
+                className="shrink-0 text-xs font-medium text-gray-600 transition hover:text-gray-900"
+              >
+                Dismiss
+              </button>
+            </div>
+            {bulk.result.skipped.map((note) => (
+              <p key={`skip-${note.name}`} className="text-xs text-amber-700">
+                Skipped {note.name} — {note.message}
+              </p>
+            ))}
+            {bulk.result.failed.map((note) => (
+              <p key={`fail-${note.name}`} className="text-xs text-red-600">
+                {note.name} — {note.message}
+              </p>
+            ))}
+            {bulk.result.warnings.map((warning) => (
+              <p key={warning} className="text-xs text-amber-700">
+                {warning}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {chosen.length > 0 && bulk.phase !== 'confirm-delete' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-600">
+              {chosen.length} selected
+            </span>
+            <div className="ml-auto flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => runBulkExport('json')}
+                disabled={running}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                <DownloadIcon size={14} /> JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => runBulkExport('zwo')}
+                disabled={running || !!zwoBlockedReason}
+                title={zwoBlockedReason}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                <DownloadIcon size={14} /> ZWO
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulk({ phase: 'confirm-delete' })}
+                disabled={running}
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                <TrashIcon size={14} /> Delete
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    ) : undefined;
+
   return (
     <Shell
       title="Garmin workouts"
       subtitle={state.status === 'ready' ? `${state.items.length} in your library` : undefined}
       onClose={onClose}
       scroll={false}
+      footer={bulkFooter}
     >
       <div className="shrink-0 border-b border-gray-100 px-4 py-4">
         <div className="flex items-center gap-1.5">
@@ -181,13 +394,52 @@ export default function WorkoutList({ version, onClose, onCreate, onImport, onSe
         )}
 
         {state.status === 'ready' && state.items.length > 0 && (
-          <input
-            type="search"
-            value={query}
-            placeholder="Search workouts…"
-            onChange={(e) => setQuery(e.target.value)}
-            className="mt-3 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
-          />
+          <>
+            <input
+              type="search"
+              value={query}
+              placeholder="Search workouts…"
+              onChange={(e) => setQuery(e.target.value)}
+              className="mt-3 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500"
+            />
+
+            <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+              <label className="flex items-center gap-2 text-gray-600">
+                <input
+                  ref={pageBoxRef}
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  disabled={running || visible.length === 0}
+                  onChange={(e) => setMany(visible.map((w) => w.workoutId), e.target.checked)}
+                  className="h-4 w-4 accent-blue-600"
+                />
+                Select page
+              </label>
+              <div className="flex items-center gap-3">
+                {filtered.length > visible.length && (
+                  <button
+                    type="button"
+                    onClick={() => setMany(filtered.map((w) => w.workoutId), true)}
+                    disabled={running}
+                    className="font-medium text-blue-600 transition hover:underline disabled:opacity-50"
+                  >
+                    Select all {filtered.length}
+                    {query.trim() ? ' matching' : ''}
+                  </button>
+                )}
+                {chosen.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    disabled={running}
+                    className="font-medium text-gray-600 transition hover:underline disabled:opacity-50"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -224,12 +476,26 @@ export default function WorkoutList({ version, onClose, onCreate, onImport, onSe
             ]
               .filter(Boolean)
               .join(' · ');
+            const isSelected = selectedIds.has(w.workoutId);
             return (
-              <li key={w.workoutId}>
+              <li
+                key={w.workoutId}
+                className={`flex items-center gap-2 rounded-lg pl-2 transition ${
+                  isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={running}
+                  onChange={() => toggleOne(w.workoutId)}
+                  aria-label={`Select ${w.workoutName}`}
+                  className="h-4 w-4 shrink-0 accent-blue-600"
+                />
                 <button
                   type="button"
                   onClick={() => onSelect(w)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-gray-50"
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-2 text-left"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-gray-800">{w.workoutName}</p>
