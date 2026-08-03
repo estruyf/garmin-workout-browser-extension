@@ -13,6 +13,10 @@ bottom-right of every Garmin Connect page; clicking it slides out a drawer that:
 - **Downloads a workout** — from the detail view, save any workout as `.json`
   (a full backup you can re-import) or as `.zwo` to ride the same session in
   Zwift.
+- **Schedules a workout** — pick a date and put any workout on your Garmin
+  calendar, straight from its detail view or from the confirmation after you
+  create or import one. The same workout can go on several days, and each date
+  can be removed again from the drawer or opened on the calendar.
 - **Bulk actions** — tick workouts in the list (or select a whole page, or every
   workout matching your search) and delete or download them in one go. Handy for
   clearing out a finished season. Selection survives paging and searching, and
@@ -87,6 +91,10 @@ session (same-origin) — so there is no separate login and no Cloudflare challe
 - On create/import it reads the page's `<meta name="csrf-token">` and POSTs to
   `connect.garmin.com/gc-api/workout-service/workout` — the same call the Garmin
   web app makes itself.
+- Scheduling posts the chosen day to
+  `gc-api/workout-service/schedule/{workoutId}`; Garmin answers with a calendar
+  entry id, which is what a later Remove deletes. Garmin's calendar has no
+  per-day route, so the link goes to the calendar itself.
 - JSON files are normalized (server-managed fields stripped, step IDs cleared)
   the way Garmin expects for a freshly created workout.
 - Conversion/preview logic lives in `src/lib/`: `zwo.ts` (ZWO → Garmin),

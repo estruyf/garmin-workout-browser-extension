@@ -20,6 +20,7 @@ import {
   type RawStep,
 } from '../lib/workout-steps';
 import PowerZones from './PowerZones';
+import SchedulePicker from './SchedulePicker';
 import Shell from './Shell';
 import WorkoutEdit from './WorkoutEdit';
 
@@ -321,6 +322,12 @@ export default function CreatePanel({ ftp, setFtp, onClose, onBack, onCreated }:
                 Back to workouts
               </button>
             </div>
+          </div>
+        )}
+
+        {status.state === 'done' && (
+          <div className="rounded-lg border border-gray-200 px-3 py-3">
+            <SchedulePicker key={status.workoutId} workoutId={status.workoutId} label="Put it on a date" />
           </div>
         )}
       </div>

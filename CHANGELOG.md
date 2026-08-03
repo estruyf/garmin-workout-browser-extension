@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Schedule a workout** — pick a date in a workout's detail view and add it to your Garmin calendar, with a link to the calendar and a Remove button to take it back off
+- The same workout can be scheduled on several days (a plan repeats sessions); each date is listed separately and can be removed on its own
+- A freshly created or imported workout offers the date picker right in its confirmation, so it can go on the calendar without a detour through the list
 - **Download a workout** — a workout's detail view can now save it as `.json` (a full backup this extension can import again) or as `.zwo`, so a Garmin session can be ridden in Zwift
 - Anything Zwift cannot express — heart-rate targets, distance or lap-button steps, repeat groups that are not a simple on/off pair — is reported under the download buttons instead of silently changing the workout
 - **Bulk actions in the workout list** — checkboxes on every workout, with "select page" and "select all matching" shortcuts; the selection is kept while you page through the list or change the search

@@ -12,6 +12,7 @@ import {
 } from '../lib/workout-steps';
 import { zwoName, zwoToGarminPayload, type GarminWorkoutPayload } from '../lib/zwo';
 import PowerZones from './PowerZones';
+import SchedulePicker from './SchedulePicker';
 import Shell from './Shell';
 import WorkoutChart from './WorkoutChart';
 import WorkoutEdit from './WorkoutEdit';
@@ -353,6 +354,12 @@ export default function ImportPanel({ ftp, setFtp, onClose, onBack, onImported }
                   Back to workouts
                 </button>
               </div>
+            </div>
+          )}
+
+          {status.state === 'done' && (
+            <div className="rounded-lg border border-gray-200 px-3 py-3">
+              <SchedulePicker key={status.workoutId} workoutId={status.workoutId} label="Put it on a date" />
             </div>
           )}
         </div>

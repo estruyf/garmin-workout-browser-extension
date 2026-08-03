@@ -14,6 +14,7 @@ import { durationLabel, jsonProfile, totalDuration, type ProfileBlock } from '..
 import { addStepAtPath, applyStepEdit, removeStepAtPath, reorderStepsAtPath } from '../lib/workout-steps';
 import { canExportZwo, garminToZwo } from '../lib/zwo-export';
 import PowerZones from './PowerZones';
+import SchedulePicker from './SchedulePicker';
 import Shell from './Shell';
 import WorkoutChart from './WorkoutChart';
 import WorkoutEdit from './WorkoutEdit';
@@ -374,6 +375,11 @@ export default function WorkoutDetail({ summary, ftp, setFtp, onClose, onBack, o
               >
                 Open in Garmin Connect
               </a>
+
+              {/* Schedule */}
+              <div className="border-t border-gray-100 pt-3">
+                <SchedulePicker key={summary.workoutId} workoutId={summary.workoutId} label="Add to your calendar" />
+              </div>
 
               {/* Download */}
               <div className="space-y-2 border-t border-gray-100 pt-3">

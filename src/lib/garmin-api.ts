@@ -117,6 +117,61 @@ export async function deleteWorkout(workoutId: number): Promise<void> {
   }
 }
 
+/** One occurrence of a workout on the Garmin Connect calendar. */
+export interface WorkoutSchedule {
+  /** Garmin's id for the calendar entry — not the workout id. */
+  workoutScheduleId: number;
+  /** The day it sits on, as YYYY-MM-DD. */
+  date: string;
+}
+
+/**
+ * Put a workout on the calendar for a given day (YYYY-MM-DD, local).
+ *
+ * A workout can be scheduled on as many days as you like; each call creates its
+ * own calendar entry, and the returned id is what removes that one entry again.
+ */
+export async function scheduleWorkout(workoutId: number, date: string): Promise<WorkoutSchedule> {
+  const token = csrfToken();
+  if (!token) throw new Error('Could not find the Garmin CSRF token — reload Garmin Connect and try again.');
+  const res = await fetch(`${BASE}/workout-service/schedule/${workoutId}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ date }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    if (res.status === 401 || res.status === 403)
+      throw new Error('Garmin rejected the request — your session may have expired. Reload Garmin Connect and try again.');
+    throw new Error(`Garmin returned HTTP ${res.status}. ${text.slice(0, 200)}`.trim());
+  }
+  const text = await res.text();
+  const body = (text ? JSON.parse(text) : {}) as Partial<WorkoutSchedule>;
+  // The id is what makes the entry removable again, so a response without one
+  // is a half-success worth reporting rather than papering over.
+  if (typeof body.workoutScheduleId !== 'number') {
+    throw new Error('Garmin scheduled the workout but did not return a calendar id. Check your Garmin calendar.');
+  }
+  return { workoutScheduleId: body.workoutScheduleId, date: body.date ?? date };
+}
+
+/** Take a single calendar entry back off the calendar. */
+export async function unscheduleWorkout(scheduleId: number): Promise<void> {
+  const token = csrfToken();
+  const res = await fetch(`${BASE}/workout-service/schedule/${scheduleId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      ...(token ? { 'connect-csrf-token': token } : {}),
+    },
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Garmin returned HTTP ${res.status} while removing it from the calendar.`);
+  }
+}
+
 /** Create a structured workout from a Garmin workout-service JSON payload. */
 export async function createWorkout(payload: unknown): Promise<CreatedWorkout> {
   const token = csrfToken();
@@ -185,6 +240,11 @@ export async function fetchCyclingFtp(): Promise<number | null> {
 export function workoutUrl(workoutId: number, workoutType?: string): string {
   const base = `https://connect.garmin.com/app/workout/${workoutId}`;
   return workoutType ? `${base}?workoutType=${encodeURIComponent(workoutType)}` : base;
+}
+
+/** The Garmin Connect calendar. It has no per-day route — the month view is it. */
+export function calendarUrl(): string {
+  return 'https://connect.garmin.com/app/calendar';
 }
 
 // ---------------------------------------------------------------------------
